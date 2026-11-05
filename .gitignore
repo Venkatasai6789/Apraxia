@@ -1,0 +1,16 @@
+# Virtual environments
+.venv/
+__pycache__/
+*.pyc
+
+# Local persistence & uploads
+backend/aprixia_clinical.db
+backend/uploads/
+
+# Node modules & builds
+frontend/node_modules/
+frontend/dist/
+
+# Large dataset features
+*.pt
+cas_master_features.csv
