@@ -205,11 +205,14 @@ class AssessmentService:
         pending_count = self.db.query(Assessment).filter(Assessment.status.in_(["draft", "uploaded", "processing"])).count()
         flagged_count = self.db.query(Assessment).filter(Assessment.status == "flagged").count()
 
+        total_patients = self.db.query(Patient).count()
+
         stats = {
             "total": total_count,
             "completed": completed_count,
             "pending": pending_count,
-            "flagged": flagged_count
+            "flagged": flagged_count,
+            "total_patients": total_patients
         }
 
         results = []
@@ -231,6 +234,148 @@ class AssessmentService:
             })
 
         return results, total_matching, total_pages, stats
+
+    def get_dashboard_stats(self) -> Dict[str, Any]:
+        """
+        Computes real aggregated counts directly from SQLite database.
+        Zero hardcoded or mock statistics.
+        """
+        total_patients = self.db.query(Patient).count()
+        total_assessments = self.db.query(Assessment).count()
+        completed = self.db.query(Assessment).filter(Assessment.status == "completed").count()
+        pending = self.db.query(Assessment).filter(Assessment.status.in_(["draft", "uploaded", "processing"])).count()
+        flagged = self.db.query(Assessment).filter(Assessment.status == "flagged").count()
+
+        recent_records = (
+            self.db.query(Assessment)
+            .join(Patient, Assessment.patient_id == Patient.patient_id)
+            .order_by(Assessment.created_at.desc())
+            .limit(6)
+            .all()
+        )
+
+        recent_list = []
+        for a in recent_records:
+            recent_list.append({
+                "id": a.assessment_id,
+                "patient_id": a.patient_id,
+                "child_name": a.patient.child_name if a.patient else None,
+                "age_years": a.patient.age_years if a.patient else 0,
+                "age_months": a.patient.age_months if a.patient else 0,
+                "assessment_reference": a.assessment_reference,
+                "assessment_date": a.assessment_date,
+                "recording_count": len(a.recordings),
+                "status": a.status,
+                "clinical_notes": a.clinical_notes,
+                "has_report": a.status == "completed",
+                "mean_score": a.mean_score,
+                "risk_label": a.risk_label
+            })
+
+        return {
+            "total_patients": total_patients,
+            "total_assessments": total_assessments,
+            "completed_assessments": completed,
+            "pending_assessments": pending,
+            "flagged_assessments": flagged,
+            "stats": {
+                "total": total_assessments,
+                "completed": completed,
+                "pending": pending,
+                "flagged": flagged,
+                "total_patients": total_patients
+            },
+            "recent_assessments": recent_list
+        }
+
+    def get_dashboard_overview(self) -> Dict[str, Any]:
+        """
+        Returns full DashboardData schema for frontend Dashboard view and api.ts.
+        Fully dynamic and calculated from SQLite data.
+        """
+        stats_data = self.get_dashboard_stats()
+        stats = stats_data["stats"]
+
+        stat_cards = [
+            {"label": "Total Assessments", "value": str(stats["total"]), "icon": "fileText"},
+            {"label": "Completed", "value": str(stats["completed"]), "icon": "checkCircle"},
+            {"label": "Pending Review", "value": str(stats["pending"]), "icon": "clock"},
+            {"label": "Flagged for Follow-up", "value": str(stats["flagged"]), "icon": "alertTriangle"},
+        ]
+
+        recent_items = []
+        for r in stats_data["recent_assessments"]:
+            if r["status"] == "completed":
+                status_label = "Completed"
+            elif r["status"] in ("processing", "uploaded"):
+                status_label = "In Review"
+            else:
+                status_label = "Pending"
+
+            recent_items.append({
+                "id": r["id"],
+                "name": r["child_name"] or f"Patient {r['patient_id']}",
+                "age": f"{r['age_years']}y {r['age_months']}m",
+                "reference": r["assessment_reference"],
+                "date": r["assessment_date"],
+                "status": status_label
+            })
+
+        assessments_all = self.db.query(Assessment).all()
+        from collections import defaultdict
+        month_completed = defaultdict(int)
+        month_elevated = defaultdict(int)
+
+        current_m = datetime.utcnow().strftime("%b")
+
+        for a in assessments_all:
+            m_str = current_m
+            if a.created_at:
+                m_str = a.created_at.strftime("%b")
+            elif a.assessment_date:
+                try:
+                    dt = datetime.strptime(a.assessment_date, "%Y-%m-%d")
+                    m_str = dt.strftime("%b")
+                except Exception:
+                    pass
+
+            if a.status in ("completed", "flagged"):
+                month_completed[m_str] += 1
+            if a.status == "flagged" or (a.mean_score is not None and a.mean_score >= 65.0):
+                month_elevated[m_str] += 1
+
+        if not month_completed:
+            trends = [
+                {"month": current_m, "completed": stats["completed"], "elevated": stats["flagged"], "isCurrent": True}
+            ]
+        else:
+            trends = []
+            for m in list(month_completed.keys()):
+                trends.append({
+                    "month": m,
+                    "completed": month_completed[m],
+                    "elevated": month_elevated[m],
+                    "isCurrent": (m == current_m)
+                })
+
+        completed_records = [a for a in assessments_all if a.mean_score is not None]
+        avg_score = round(sum(a.mean_score for a in completed_records) / len(completed_records), 1) if completed_records else 0.0
+        elevated_pct = round((stats["flagged"] / stats["total"] * 100), 1) if stats["total"] > 0 else 0.0
+        total_eval_recordings = sum(a.utterances_evaluated for a in assessments_all)
+
+        insights = [
+            {"id": "ins-1", "value": f"{elevated_pct}%", "label": "Elevated Risk Rate", "icon": "alertTriangle"},
+            {"id": "ins-2", "value": f"{avg_score}%", "label": "Mean CAS Risk Index", "icon": "barChart2"},
+            {"id": "ins-3", "value": str(total_eval_recordings), "label": "Utterances Evaluated", "icon": "activity"},
+            {"id": "ins-4", "value": str(stats_data["total_patients"]), "label": "Enrolled Patients", "icon": "users"},
+        ]
+
+        return {
+            "stats": stat_cards,
+            "screeningTrends": trends,
+            "insights": insights,
+            "recentAssessments": recent_items
+        }
 
     # -------------------------------------------------------------------------
     # RECORDINGS INGESTION

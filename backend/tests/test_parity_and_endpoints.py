@@ -21,6 +21,8 @@ import soundfile as sf
 from fastapi.testclient import TestClient
 
 from backend.main import app
+from backend.services.audio_service import validate_and_inspect_audio
+from backend.services.serialization_service import dumps_safe_json, loads_safe_json
 from ml_engine import CASMLEngine, calculate_aggregate_metrics
 
 
@@ -125,6 +127,18 @@ class TestModelParityAndEndpoints(unittest.TestCase):
         self.assertIsNone(res)
         self.assertIsNotNone(err)
 
+    def test_empty_audio_rejection(self):
+        """Rejects 0-byte empty audio files."""
+        is_valid, msg, _ = validate_and_inspect_audio(b"", "empty.wav")
+        self.assertFalse(is_valid)
+        self.assertIn("empty", msg.lower())
+
+    def test_unsupported_format_rejection(self):
+        """Rejects non-whitelisted audio file extensions."""
+        is_valid, msg, _ = validate_and_inspect_audio(b"fake_content", "document.pdf")
+        self.assertFalse(is_valid)
+        self.assertIn("unsupported", msg.lower())
+
     # -------------------------------------------------------------------------
     # 3. END-TO-END REST API WORKFLOW TESTS
     # -------------------------------------------------------------------------
@@ -217,6 +231,94 @@ class TestModelParityAndEndpoints(unittest.TestCase):
         res_csv = self.client.get(f"/api/v1/assessments/{ass_id}/export")
         self.assertEqual(res_csv.status_code, 200)
         self.assertIn("Apraxia Prediction Score", res_csv.text)
+
+    def test_assessments_stats_endpoint(self):
+        """Test GET /api/v1/assessments/stats returns real SQLite aggregated counts."""
+        res = self.client.get("/api/v1/assessments/stats")
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertIn("total", data)
+        self.assertIn("completed", data)
+        self.assertIn("pending", data)
+        self.assertIn("flagged", data)
+        self.assertIn("total_patients", data)
+        self.assertGreaterEqual(data["total"], 1)
+        self.assertGreaterEqual(data["total_patients"], 1)
+
+    def test_dashboard_stats_endpoint(self):
+        """Test GET /api/v1/dashboard/stats returns real clinical stats and recent dossiers."""
+        res = self.client.get("/api/v1/dashboard/stats")
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertIn("total_patients", data)
+        self.assertIn("total_assessments", data)
+        self.assertIn("completed_assessments", data)
+        self.assertIn("pending_assessments", data)
+        self.assertIn("flagged_assessments", data)
+        self.assertIn("stats", data)
+        self.assertIn("recent_assessments", data)
+        self.assertIsInstance(data["recent_assessments"], list)
+
+    def test_dashboard_overview_endpoints(self):
+        """Test GET /api/v1/dashboard/overview and alias /api/dashboard/overview for React Dashboard."""
+        for path in ["/api/v1/dashboard/overview", "/api/dashboard/overview"]:
+            res = self.client.get(path)
+            self.assertEqual(res.status_code, 200, f"Endpoint {path} failed")
+            data = res.json()
+            self.assertIn("stats", data)
+            self.assertIn("screeningTrends", data)
+            self.assertIn("insights", data)
+            self.assertIn("recentAssessments", data)
+            self.assertEqual(len(data["stats"]), 4)
+            self.assertGreaterEqual(len(data["insights"]), 4)
+
+    def test_invalid_recording_upload_handling(self):
+        """Test uploading empty and unsupported audio files via multipart endpoint."""
+        # Create an assessment first
+        create_res = self.client.post("/api/v1/assessments", json={
+            "child_name": "Upload Validation Test",
+            "age_years": 4,
+            "age_months": 2
+        })
+        ass_id = create_res.json()["id"]
+
+        # Upload an empty file and an unsupported format file
+        files = [
+            ("files", ("empty.wav", b"", "audio/wav")),
+            ("files", ("malicious.exe", b"binary_data", "application/octet-stream"))
+        ]
+        upload_res = self.client.post(f"/api/v1/assessments/{ass_id}/recordings", files=files)
+        self.assertEqual(upload_res.status_code, 201)
+        recs = upload_res.json()
+        self.assertEqual(len(recs), 2)
+        for r in recs:
+            self.assertEqual(r["validation_status"], "invalid")
+            self.assertEqual(r["processing_status"], "failed")
+            self.assertIsNotNone(r["error_message"])
+
+    def test_safe_json_rfc8259_serialization(self):
+        """Test RFC 8259 compliance ensuring NaN and Infinity are safely serialized to null."""
+        test_payload = {
+            "valid_float": 12.34,
+            "nan_val": float("nan"),
+            "inf_pos": float("inf"),
+            "inf_neg": float("-inf"),
+            "numpy_nan": np.nan,
+            "nested": {
+                "sub_nan": float("nan"),
+                "sub_list": [1.0, float("nan"), 3.0]
+            }
+        }
+        json_str = dumps_safe_json(test_payload)
+        self.assertNotIn("NaN", json_str)
+        self.assertNotIn("Infinity", json_str)
+        loaded = loads_safe_json(json_str)
+        self.assertIsNone(loaded["nan_val"])
+        self.assertIsNone(loaded["inf_pos"])
+        self.assertIsNone(loaded["inf_neg"])
+        self.assertIsNone(loaded["numpy_nan"])
+        self.assertIsNone(loaded["nested"]["sub_nan"])
+        self.assertIsNone(loaded["nested"]["sub_list"][1])
 
 
 if __name__ == "__main__":

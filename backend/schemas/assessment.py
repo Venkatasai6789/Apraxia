@@ -22,6 +22,7 @@ class AssessmentSummaryStats(BaseModel):
     completed: int
     pending: int
     flagged: int
+    total_patients: Optional[int] = None
 
 
 class AssessmentItemResponse(BaseModel):

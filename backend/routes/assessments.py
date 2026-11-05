@@ -1,7 +1,7 @@
 """
 Assessments API Router
 """
-from typing import Optional
+from typing import Optional, Dict
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
@@ -69,6 +69,14 @@ def list_assessments(
         total_pages=total_pages,
         stats=stats
     )
+
+
+@router.get("/stats", response_model=Dict[str, int])
+def get_assessment_stats(db: Session = Depends(get_db)):
+    """Returns aggregated assessment summary statistics directly from SQLite."""
+    service = AssessmentService(db)
+    stats_data = service.get_dashboard_stats()
+    return stats_data["stats"]
 
 
 @router.get("/{assessment_id}", response_model=AssessmentDetailResponse)

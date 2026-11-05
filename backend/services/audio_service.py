@@ -31,6 +31,9 @@ def validate_and_inspect_audio(
     Validates audio decodability, duration, channels, and sample rate.
     Returns: (is_valid, message, metadata_dict)
     """
+    if not file_bytes or len(file_bytes) == 0:
+        return False, "Audio file is empty (0 bytes).", {}
+
     ext = Path(filename).suffix.lower()
     if ext not in ALLOWED_EXTENSIONS:
         return False, f"Unsupported audio format '{ext}'. Allowed: .wav, .mp3, .m4a, .flac", {}

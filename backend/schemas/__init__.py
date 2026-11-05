@@ -16,6 +16,14 @@ from backend.schemas.results import (
     AcousticProfileResponse,
     UtteranceResultItem,
 )
+from backend.schemas.dashboard import (
+    DashboardStatsResponse,
+    DashboardOverviewResponse,
+    StatCardItem,
+    ScreeningTrendItem,
+    AssessmentInsightItem,
+    RecentAssessmentCard,
+)
 
 __all__ = [
     "PatientBase",
@@ -32,4 +40,10 @@ __all__ = [
     "AssessmentResultsResponse",
     "AcousticProfileResponse",
     "UtteranceResultItem",
+    "DashboardStatsResponse",
+    "DashboardOverviewResponse",
+    "StatCardItem",
+    "ScreeningTrendItem",
+    "AssessmentInsightItem",
+    "RecentAssessmentCard",
 ]
