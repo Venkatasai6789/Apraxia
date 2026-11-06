@@ -31,6 +31,7 @@ from backend.services.serialization_service import dumps_safe_json, loads_safe_j
 from backend.services.audio_service import (
     validate_and_inspect_audio,
     save_recording_file,
+    sanitize_filename,
 )
 
 UPLOADS_BASE = PROJECT_ROOT / "backend" / "uploads"
@@ -393,15 +394,24 @@ class AssessmentService:
         is_valid, msg, meta = validate_and_inspect_audio(file_bytes, filename)
         if not is_valid:
             # Create invalid/rejected record for audit integrity
-            rec_id, stored_name, target_path = save_recording_file(
-                UPLOADS_BASE / assessment.assessment_id, file_bytes, filename
-            )
+            # Avoid writing oversize files (>50MB) to disk to prevent disk exhaustion DoS
+            rec_id = f"rec-{uuid.uuid4().hex[:10]}"
+            safe_name = sanitize_filename(filename)
+            stored_name = f"{rec_id}_{safe_name}"
+            file_path_str = ""
+
+            if len(file_bytes) <= 50 * 1024 * 1024:
+                rec_id, stored_name, target_path = save_recording_file(
+                    UPLOADS_BASE / assessment.assessment_id, file_bytes, filename
+                )
+                file_path_str = str(target_path)
+
             recording = Recording(
                 recording_id=rec_id,
                 assessment_id=assessment.assessment_id,
                 original_filename=filename,
                 stored_filename=stored_name,
-                file_path=str(target_path),
+                file_path=file_path_str,
                 file_size=len(file_bytes),
                 duration=0.0,
                 validation_status="invalid",

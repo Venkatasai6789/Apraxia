@@ -14,3 +14,7 @@ frontend/dist/
 # Large dataset features
 *.pt
 cas_master_features.csv
+
+# Agent logs and temporary caches
+.agents/
+.pytest_cache/

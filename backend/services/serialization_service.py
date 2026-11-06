@@ -12,7 +12,7 @@ class SafeJSONEncoder(json.JSONEncoder):
     """Encodes NumPy arrays, scalars, and sanitizes NaN / Infinity to None."""
     def default(self, obj: Any) -> Any:
         if isinstance(obj, np.ndarray):
-            return obj.tolist()
+            return sanitize_floats(obj.tolist())
         if isinstance(obj, (np.integer, np.int64, np.int32)):
             return int(obj)
         if isinstance(obj, (np.floating, np.float64, np.float32)):
@@ -22,9 +22,9 @@ class SafeJSONEncoder(json.JSONEncoder):
         if isinstance(obj, (pd.Timestamp, pd.Period)):
             return str(obj)
         if isinstance(obj, pd.DataFrame):
-            return obj.to_dict(orient="records")
+            return sanitize_floats(obj.to_dict(orient="records"))
         if isinstance(obj, pd.Series):
-            return obj.to_dict()
+            return sanitize_floats(obj.to_dict())
         return super().default(obj)
 
 
@@ -34,6 +34,10 @@ def sanitize_floats(obj: Any) -> Any:
         return {k: sanitize_floats(v) for k, v in obj.items()}
     elif isinstance(obj, list):
         return [sanitize_floats(v) for v in obj]
+    elif isinstance(obj, tuple):
+        return [sanitize_floats(v) for v in obj]
+    elif isinstance(obj, np.ndarray):
+        return sanitize_floats(obj.tolist())
     elif isinstance(obj, float):
         if math.isnan(obj) or math.isinf(obj):
             return None
@@ -46,9 +50,12 @@ def sanitize_floats(obj: Any) -> Any:
 
 
 def dumps_safe_json(data: Any) -> str:
-    """Serializes data to JSON string ensuring all numerical types are clean."""
+    """
+    Serializes data to JSON string ensuring strict RFC 8259 compliance.
+    Converts NaN, Infinity, and -Infinity to JSON null.
+    """
     sanitized = sanitize_floats(data)
-    return json.dumps(sanitized, cls=SafeJSONEncoder)
+    return json.dumps(sanitized, cls=SafeJSONEncoder, allow_nan=False)
 
 
 def loads_safe_json(json_str: str) -> Any:

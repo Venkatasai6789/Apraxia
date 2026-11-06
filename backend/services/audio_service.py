@@ -17,10 +17,45 @@ MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024  # 50 MB
 MIN_DURATION_SECONDS = 0.2  # 200 milliseconds minimum as required by ML pipeline
 
 
+import posixpath
+
+
 def sanitize_filename(filename: str) -> str:
-    """Removes path traversals and invalid characters."""
-    base = os.path.basename(filename)
+    """
+    Removes path traversals, drive letters, control characters, and invalid characters.
+    Handles both POSIX ('/') and Windows ('\\') path separators regardless of host OS.
+    """
+    if not filename:
+        return "unnamed_audio.wav"
+
+    # Strip null bytes and control characters
+    cleaned = re.sub(r"[\x00-\x1f\x7f-\x9f]", "", str(filename))
+
+    # Normalize backslashes to forward slashes to strip directories across platforms
+    cleaned = cleaned.replace("\\", "/")
+
+    # Strip drive letters (e.g. C:)
+    if ":" in cleaned:
+        cleaned = cleaned.split(":")[-1]
+
+    # Extract only the basename (final path segment)
+    base = posixpath.basename(cleaned)
+
+    # Remove any leading dots/slashes to prevent hidden files or traversal remnants
+    base = re.sub(r"^[./\\]+", "", base)
+
+    # Replace any character other than alphanumeric, _, -, and . with underscore
     safe = re.sub(r"[^a-zA-Z0-9_\-\.]", "_", base)
+
+    # Collapse multiple consecutive dots to prevent dot-dot traversal
+    safe = re.sub(r"\.{2,}", ".", safe)
+
+    # Strip leading and trailing dots or underscores
+    safe = safe.strip("._")
+
+    if not safe:
+        safe = "audio_recording.wav"
+
     return safe[:128]
 
 
@@ -74,14 +109,22 @@ def save_recording_file(
     storage_dir: Path, file_bytes: bytes, filename: str
 ) -> Tuple[str, str, Path]:
     """
-    Saves audio file securely to disk.
+    Saves audio file securely to disk with strict directory traversal confinement.
     Returns: (recording_id, stored_filename, full_file_path)
     """
     storage_dir.mkdir(parents=True, exist_ok=True)
     rec_id = f"rec-{uuid.uuid4().hex[:10]}"
     safe_name = sanitize_filename(filename)
     stored_name = f"{rec_id}_{safe_name}"
-    target_path = storage_dir / stored_name
+    
+    resolved_storage = storage_dir.resolve()
+    target_path = (resolved_storage / stored_name).resolve()
+
+    # Strict containment defense: target_path must be within resolved_storage
+    try:
+        target_path.relative_to(resolved_storage)
+    except ValueError:
+        raise ValueError(f"Path traversal detected: {filename}")
 
     with open(target_path, "wb") as f:
         f.write(file_bytes)
