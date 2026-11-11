@@ -1,20 +1,158 @@
-# Virtual environments
-.venv/
-__pycache__/
-*.pyc
+# =============================================================================
+# Aprixia Root .gitignore — Zero Data-Leakage & Clean Repository Guardrails
+# =============================================================================
 
-# Local persistence & uploads
+# -----------------------------------------------------------------------------
+# 1. Clinical Databases, Persistence & Patient Records (NEVER COMMIT)
+# -----------------------------------------------------------------------------
 backend/aprixia_clinical.db
-backend/uploads/
+backend/aprixia_clinical.db-*
+*.db
+*.db-wal
+*.db-shm
+*.db-journal
+*.sqlite
+*.sqlite3
+*.sqlite-wal
+*.sqlite-shm
+*.sql
+*.dump
+*.bak
 
-# Node modules & builds
+# -----------------------------------------------------------------------------
+# 2. Uploaded Patient Audio, Clinical Exports & Research Speech Corpora
+# -----------------------------------------------------------------------------
+backend/uploads/
+**/uploads/
+exports/
+Aprixia_Screening_*.csv
+cas_clinical_screening_report.csv
+
+# Clinical & evaluation audio datasets (UltraSuite, ENNI, TORGO, etc.)
+test_datasets/
+**/test_datasets/
+core_upx/
+core_uxssd/
+core_uxtd/
+upx_processed_child_wav/
+uxssd_processed_child_wav/
+uxtd_processed_child_wav/
+datasets/
+data/
+raw_data/
+processed_data/
+
+# Audio recording formats (prevents accidental patient/corpus audio leakage)
+*.wav
+*.mp3
+*.m4a
+*.flac
+*.ogg
+*.opus
+*.webm
+*.aac
+*.wma
+*.aiff
+
+# -----------------------------------------------------------------------------
+# 3. Tabular Datasets, Manifests, Predictions & Extracted Feature Matrices
+# -----------------------------------------------------------------------------
+*.csv
+*.tsv
+*.parquet
+*.feather
+*.xlsx
+*.xls
+cas_master_features.csv
+multi_dataset_generalization_report.csv
+
+# -----------------------------------------------------------------------------
+# 4. Secrets, Credentials, Environment Variables & Keys
+# -----------------------------------------------------------------------------
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+*.jks
+*.secret
+credentials.json
+secrets.json
+*service-account*.json
+
+# -----------------------------------------------------------------------------
+# 5. Large ML Checkpoints, Feature Tensors & Model Caches
+# -----------------------------------------------------------------------------
+*.pt
+*.pth
+*.bin
+*.safetensors
+*.onnx
+*.h5
+*.hdf5
+*.npy
+*.npz
+*.pkl
+*.pickle
+.cache/
+hf_cache/
+huggingface/
+torch_cache/
+
+# Loose duplicate notebook/figure artifacts at repository root
+/08_executed_final.ipynb
+/cross_dataset_score_distribution.png
+.ipynb_checkpoints/
+
+# -----------------------------------------------------------------------------
+# 6. Python Environments, Bytecode & Test Caches
+# -----------------------------------------------------------------------------
+.venv/
+venv/
+env/
+ENV/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# -----------------------------------------------------------------------------
+# 7. Node Modules, Frontend Builds & Browser E2E Test Artifacts
+# -----------------------------------------------------------------------------
 frontend/node_modules/
 frontend/dist/
+frontend/dist-ssr/
+frontend/test-results/
+frontend/playwright-report/
+**/node_modules/
+**/dist/
+**/dist-ssr/
+**/test-results/
+**/playwright-report/
+**/blob-report/
+playwright/.cache/
 
-# Large dataset features
-*.pt
-cas_master_features.csv
-
-# Agent logs and temporary caches
+# -----------------------------------------------------------------------------
+# 8. Logs, Temp Files, IDE Settings, OS Metadata & Agent Workspace Artifacts
+# -----------------------------------------------------------------------------
+*.log
+logs/
+tmp/
+temp/
 .agents/
-.pytest_cache/
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+Desktop.ini
