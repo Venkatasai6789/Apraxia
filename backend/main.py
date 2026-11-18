@@ -23,6 +23,7 @@ from backend.routes.assessments import router as assessments_router
 from backend.routes.recordings import router as recordings_router
 from backend.routes.results import router as results_router
 from backend.routes.dashboard import router as dashboard_router
+from backend.routes.device import router as device_router
 from backend.services.assessment_service import AssessmentService
 from ml_engine import CASMLEngine
 
@@ -140,6 +141,7 @@ app.include_router(assessments_router)
 app.include_router(recordings_router)
 app.include_router(results_router)
 app.include_router(dashboard_router)
+app.include_router(device_router)
 
 
 @app.get("/api/v1/health", tags=["Health"])
